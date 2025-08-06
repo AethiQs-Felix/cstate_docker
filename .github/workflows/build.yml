@@ -6,8 +6,8 @@ on:
     - cron: '0 0 * * *'  # Daily at midnight
 
 permissions:
-  contents: write  # Needed to commit hash file
-  packages: write  # Needed to push to GHCR
+  contents: write
+  packages: write
 
 jobs:
   build-and-push:
@@ -26,7 +26,11 @@ jobs:
       - name: Read previous hash
         id: read_hash
         run: |
-          LAST_HASH=$(cat latest_cstate_hash.txt 2>/dev/null || echo "none")
+          if [ -f latest_cstate_hash.txt ]; then
+            LAST_HASH=$(cat latest_cstate_hash.txt)
+          else
+            LAST_HASH="none"
+          fi
           echo "last_hash=$LAST_HASH" >> $GITHUB_OUTPUT
 
       - name: Decide whether to skip build
