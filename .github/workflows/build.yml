@@ -40,6 +40,7 @@ jobs:
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Checkout cState
         if: steps.check_skip.outputs.skip != 'true'
