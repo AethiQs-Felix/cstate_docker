@@ -18,13 +18,13 @@ This command is equivalent to the following `docker-compose` service:
 
 ```yaml
 cstate:
-	image: ghcr.io/aethiqs-felix/cstate:latest
-	container_name: cstate
-	restart: unless-stopped
-	ports:
-		- "8080:80"
-	volumes:
-		- ./app_data:/app
+    image: ghcr.io/aethiqs-felix/cstate:latest
+    container_name: cstate
+    restart: unless-stopped
+    ports:
+        - "8080:80"
+    volumes:
+        - ./app_data:/app
 ```
 
 ## License
