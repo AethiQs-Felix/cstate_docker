@@ -1,90 +1,90 @@
 name: Conditional Docker Build for cState
-
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * *'  # Daily at midnight
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight
 
 permissions:
-  contents: write
-  packages: write
-
+  contents: write
+  packages: write
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+          path: main-repo  # Keep our repo in a separate folder
 
-    steps:
-      - name: Checkout this repo
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: true
-          fetch-depth: 0
-
-      - name: Get latest commit hash from cState
-        id: get_hash
-        run: |
+      - name: Get latest commit hash from cState
+        id: get_hash
+        run: |
           HASH=$(git ls-remote https://github.com/cstate/cstate.git HEAD | cut -f1)
-          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+    
+      - name: Read previous hash
+        id: read_hash
+        run: |
+          if [ -f main-repo/latest_cstate_hash.txt ]; then
+            LAST_HASH=$(cat main-repo/latest_cstate_hash.txt)
+          else
+            LAST_HASH="none"
+          fi
+          echo "last_hash=$LAST_HASH" >> $GITHUB_OUTPUT
+  
+      - name: Decide whether to skip build
+        id: check_skip
+        run: |
+          if [ "${{ steps.get_hash.outputs.hash }}" = "${{ steps.read_hash.outputs.last_hash }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Read previous hash
-        id: read_hash
-        run: |
-          if [ -f latest_cstate_hash.txt ]; then
-            LAST_HASH=$(cat latest_cstate_hash.txt)
-          else
-            LAST_HASH="none"
-          fi
-          echo "last_hash=$LAST_HASH" >> $GITHUB_OUTPUT
+      - name: Checkout cState
+        if: steps.check_skip.outputs.skip != 'true'
+        uses: actions/checkout@v3
+        with:
+          repository: cstate/cstate
+          path: cstate-src
 
-      - name: Decide whether to skip build
-        id: check_skip
-        run: |
-          if [ "${{ steps.get_hash.outputs.hash }}" = "${{ steps.read_hash.outputs.last_hash }}" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Set up QEMU
+        if: steps.check_skip.outputs.skip != 'true'
+        uses: docker/setup-qemu-action@v3
 
-      - name: Checkout cState
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: actions/checkout@v3
-        with:
-          repository: cstate/cstate
+      - name: Set up Docker Buildx
+        if: steps.check_skip.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
 
-      - name: Set up QEMU
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: docker/login-action@v3
-        with:
+      - name: Log in to GHCR
+        if: steps.check_skip.outputs.skip != 'true'
+        uses: docker/login-action@v3
+        with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Docker Image
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/aethiqs-felix/cstate:latest,ghcr.io/aethiqs-felix/cstate:${{ steps.read_hash.outputs.last_hash }}
-          platforms: linux/amd64,linux/arm64,linux/386
+      - name: Build and Push Docker Image
+        if: steps.check_skip.outputs.skip != 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./cstate-src
+          push: true
+          tags: ghcr.io/aethiqs-felix/cstate:latest,ghcr.io/aethiqs-felix/cstate:${{ steps.get_hash.outputs.hash }}
+          platforms: linux/amd64,linux/arm64,linux/386
 
-      - name: Save latest hash to file
-        if: steps.check_skip.outputs.skip != 'true'
-        run: echo "${{ steps.get_hash.outputs.hash }}" > latest_cstate_hash.txt
+      - name: Save latest hash to file
+        if: steps.check_skip.outputs.skip != 'true'
+        run: echo "${{ steps.get_hash.outputs.hash }}" > main-repo/latest_cstate_hash.txt
 
-      - name: Commit updated hash file
-        if: steps.check_skip.outputs.skip != 'true'
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add latest_cstate_hash.txt
-          git commit -m "Update cState commit hash to ${{ steps.get_hash.outputs.hash }}"
-          git push
+      - name: Commit updated hash file to same repo
+        if: steps.check_skip.outputs.skip != 'true'
+        run: |
+          cd main-repo
+git config --global user.name "github-actions[bot]"
+git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add latest_cstate_hash.txt
+          git commit -m "Update cState commit hash to ${{ steps.get_hash.outputs.hash }}" || echo "No changes to commit"
+          git push
